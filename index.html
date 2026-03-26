@@ -5,71 +5,209 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Calcul Covoiturage</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        input, button {
-            margin: 10px 0;
-            padding: 8px;
-            width: 100%;
-        }
-        button {
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            cursor: pointer;
-        }
-        #resultat {
-            margin-top: 20px;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-        }
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; }
+        input, button { margin: 10px 0; padding: 8px; width: 100%; }
+        button { background-color: #4CAF50; color: white; border: none; cursor: pointer; font-size: 16px; }
+        button:hover { background-color: #45a049; }
+        #resultat { margin-top: 20px; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
+        .prix { font-size: 28px; font-weight: bold; color: #4CAF50; margin: 15px 0; text-align: center; }
+        .info { background-color: #e7f3fe; padding: 8px; margin: 10px 0; border-radius: 5px; }
+        .recap { background-color: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .recap-item { padding: 5px 0; border-bottom: 1px solid #ddd; }
+        .recap-item:last-child { border-bottom: none; }
+        .positif { color: #5cb85c; font-weight: bold; }
+        .negatif { color: #d9534f; font-weight: bold; }
+        .reversement-item { background-color: #fff3e0; padding: 8px; margin: 5px 0; border-radius: 5px; border-left: 4px solid #ff9800; }
+        h3 { margin: 0 0 10px 0; color: #333; }
+        .error { color: #d9534f; font-weight: bold; }
     </style>
 </head>
 <body>
     <h1>Calcul Covoiturage</h1>
-    <form>
+    <div>
         <label for="randonneurs">Nombre de randonneurs :</label>
-        <input type="number" id="randonneurs" required>
-
+        <input type="number" id="randonneurs" placeholder="ex: 22">
+    </div>
+    <div>
         <label for="kilometres">Kilomètres (aller-retour) :</label>
-        <input type="number" id="kilometres" required>
-
-        <label for="prixKm">Prix au km (€) :</label>
-        <input type="number" id="prixKm" value="0.10" step="0.01" required>
-
-        <button type="button" onclick="calculer()">Calculer</button>
-    </form>
-
+        <input type="number" id="kilometres" placeholder="ex: 100">
+    </div>
+    <div>
+        <label for="prixKm">Tarif passager par km (€) :</label>
+        <input type="number" id="prixKm" value="0.10" step="0.01" min="0">
+    </div>
+    <button onclick="calculer()">Calculer</button>
     <div id="resultat"></div>
 
     <script>
+        // Conversion euros ↔ centimes
+        function euroToCents(euro) { return Math.round(euro * 100); }
+        function centsToEuro(cents) { return cents / 100; }
+
+        function repartirPersonnesParVoiture(total, capacite = 5) {
+            const nVoitures = Math.ceil(total / capacite);
+            let repartition = new Array(nVoitures).fill(Math.floor(total / nVoitures));
+            let reste = total % nVoitures;
+            for (let i = 0; i < reste; i++) repartition[i]++;
+            return repartition;
+        }
+
+        // Reversements multiples (classique)
+        function reversementsMultiples(donneursCents, receveursCents) {
+            let transferts = [];
+            let d = donneursCents.map(d => ({ voiture: d.voiture, montant: d.montant }));
+            let r = receveursCents.map(r => ({ voiture: r.voiture, montant: r.montant }));
+            let i = 0, j = 0;
+            while (i < d.length && j < r.length) {
+                const montant = Math.min(d[i].montant, r[j].montant);
+                if (montant > 0) {
+                    transferts.push({ de: d[i].voiture, vers: r[j].voiture, montantCents: montant });
+                    d[i].montant -= montant;
+                    r[j].montant -= montant;
+                }
+                if (d[i].montant === 0) i++;
+                if (r[j].montant === 0) j++;
+            }
+            return transferts;
+        }
+
+        // Reversements simples (un donneur → un receveur)
+        function reversementsSimples(donneursCents, receveursCents, seuilCents = 50) {
+            let transferts = [];
+            let d = donneursCents.map(d => ({ voiture: d.voiture, montant: d.montant }));
+            let r = receveursCents.map(r => ({ voiture: r.voiture, montant: r.montant }));
+            d.sort((a,b) => b.montant - a.montant);
+            r.sort((a,b) => b.montant - a.montant);
+            
+            for (let donneur of d) {
+                if (donneur.montant === 0) continue;
+                let receveur = r.find(r => r.montant > 0);
+                if (!receveur) break;
+                const montant = Math.min(donneur.montant, receveur.montant);
+                if (montant > 0) {
+                    transferts.push({ de: donneur.voiture, vers: receveur.voiture, montantCents: montant });
+                    donneur.montant -= montant;
+                    receveur.montant -= montant;
+                }
+            }
+            const residuelDonneurs = d.filter(d => d.montant > seuilCents);
+            const residuelReceveurs = r.filter(r => r.montant > seuilCents);
+            if (residuelDonneurs.length > 0 || residuelReceveurs.length > 0) {
+                return null;
+            }
+            return transferts;
+        }
+
         function calculer() {
             const randonneurs = parseInt(document.getElementById("randonneurs").value);
             const kilometres = parseInt(document.getElementById("kilometres").value);
-            const prixKm = parseFloat(document.getElementById("prixKm").value);
+            const tarifPassagerKm = parseFloat(document.getElementById("prixKm").value);
 
-            const voitures = Math.ceil(randonneurs / 4);
-            const passagersPayants = randonneurs - voitures;
-            const sommeTotale = kilometres * prixKm * passagersPayants;
-            const sommeParPassager = sommeTotale / passagersPayants;
-            const sommeParVoiture = sommeTotale / voitures;
-
-            let repartition = "<h3>Répartition :</h3>";
-            for (let i = 1; i <= voitures; i++) {
-                repartition += `<p>Voiture ${i} : ${sommeParVoiture.toFixed(2)} €</p>`;
+            // Validation
+            if (isNaN(randonneurs) || randonneurs < 1) {
+                document.getElementById("resultat").innerHTML = `<div class="error">Veuillez entrer un nombre valide de randonneurs (≥ 1).</div>`;
+                return;
+            }
+            if (isNaN(kilometres) || kilometres <= 0) {
+                document.getElementById("resultat").innerHTML = `<div class="error">Veuillez entrer une distance positive (km).</div>`;
+                return;
+            }
+            if (isNaN(tarifPassagerKm) || tarifPassagerKm < 0) {
+                document.getElementById("resultat").innerHTML = `<div class="error">Veuillez entrer un tarif valide (≥ 0).</div>`;
+                return;
             }
 
-            document.getElementById("resultat").innerHTML = `
-                <h3>Résultats</h3>
-                <p>Nombre de voitures : ${voitures}</p>
-                <p>Somme par passager : ${sommeParPassager.toFixed(2)} €</p>
-                ${repartition}
-            `;
+            const personnesParVoiture = repartirPersonnesParVoiture(randonneurs, 5);
+            const nVoitures = personnesParVoiture.length;
+            const nbPassagers = randonneurs - nVoitures;
+            
+            const montantParPassagerCents = euroToCents(kilometres * tarifPassagerKm);
+            const totalCollecteCents = nbPassagers * montantParPassagerCents;
+            const montantCibleParConducteurCents = nVoitures > 0 ? Math.round(totalCollecteCents / nVoitures) : 0;
+            
+            let voitures = [];
+            for (let i = 0; i < nVoitures; i++) {
+                const nbPers = personnesParVoiture[i];
+                const nbPass = nbPers - 1;
+                const collecteCents = nbPass * montantParPassagerCents;
+                const ecartCents = collecteCents - montantCibleParConducteurCents;
+                voitures.push({
+                    voiture: i+1,
+                    nbPersonnes: nbPers,
+                    nbPassagers: nbPass,
+                    collecteCents: collecteCents,
+                    cibleCents: montantCibleParConducteurCents,
+                    ecartCents: ecartCents,
+                    reverseOutCents: 0,
+                    reverseInCents: 0
+                });
+            }
+            
+            let donneursCents = voitures.filter(v => v.ecartCents > 0).map(v => ({ voiture: v.voiture, montant: v.ecartCents }));
+            let receveursCents = voitures.filter(v => v.ecartCents < 0).map(v => ({ voiture: v.voiture, montant: -v.ecartCents }));
+            
+            let reversements = [];
+            let method = "simple";
+            if (donneursCents.length > 0 && receveursCents.length > 0) {
+                reversements = reversementsSimples(donneursCents, receveursCents, 50);
+                if (reversements === null) {
+                    method = "multiple";
+                    reversements = reversementsMultiples(donneursCents, receveursCents);
+                }
+            }
+            
+            for (let t of reversements) {
+                const donneur = voitures.find(v => v.voiture === t.de);
+                const receveur = voitures.find(v => v.voiture === t.vers);
+                if (donneur) {
+                    donneur.reverseOutCents += t.montantCents;
+                    donneur.ecartCents -= t.montantCents;
+                }
+                if (receveur) {
+                    receveur.reverseInCents += t.montantCents;
+                    receveur.ecartCents += t.montantCents;
+                }
+            }
+            
+            for (let v of voitures) {
+                v.netRecuCents = v.collecteCents - v.reverseOutCents + v.reverseInCents;
+            }
+            
+            const prixPassagerEuro = centsToEuro(montantParPassagerCents);
+            const montantCibleEuro = centsToEuro(montantCibleParConducteurCents);
+            
+            let resultHTML = `<h3>📊 Résultat</h3>`;
+            resultHTML += `<div class="prix">💰 Chaque passager paie : ${prixPassagerEuro.toFixed(1)} €</div>`;
+            resultHTML += `<div class="info">🚗 ${randonneurs} randonneurs → ${nVoitures} voitures<br>`;
+            for (let i = 0; i < personnesParVoiture.length; i++) {
+                resultHTML += `V${i+1}: ${personnesParVoiture[i]} pers `;
+            }
+            resultHTML += `<br>🎯 Chaque conducteur doit recevoir (après mutualisation) : ${montantCibleEuro.toFixed(1)} €</div>`;
+            
+            if (reversements.length > 0) {
+                resultHTML += `<h3>🔄 Reversements (méthode ${method === "simple" ? "un donneur → un receveur" : "multiple"})</h3>`;
+                for (let rev of reversements) {
+                    resultHTML += `<div class="reversement-item">🚗 Voiture ${rev.de} reverse ${(rev.montantCents/100).toFixed(1)} € à la voiture ${rev.vers}</div>`;
+                }
+                if (method === "multiple") {
+                    resultHTML += `<div class="info">ℹ️ La contrainte "un seul reversement par chauffeur" a été levée car l'écart résiduel aurait dépassé 0,50 €.</div>`;
+                }
+            } else {
+                resultHTML += `<div class="info">✅ Aucun reversement nécessaire, chaque conducteur reçoit déjà le montant cible.</div>`;
+            }
+            
+            resultHTML += `<h3>📋 Montant net reçu par chaque conducteur (après reversements)</h3>`;
+            resultHTML += `<div class="recap">`;
+            for (let v of voitures) {
+                const netEuro = (v.netRecuCents / 100).toFixed(1);
+                let details = "";
+                if (v.reverseOutCents > 0) details += ` <span class="negatif">(a reversé ${(v.reverseOutCents/100).toFixed(1)} €)</span>`;
+                if (v.reverseInCents > 0) details += ` <span class="positif">(a reçu ${(v.reverseInCents/100).toFixed(1)} €)</span>`;
+                resultHTML += `<div class="recap-item">🚗 Voiture ${v.voiture} (${v.nbPersonnes} pers) : <strong>${netEuro} €</strong> (cible: ${(v.cibleCents/100).toFixed(1)} €)${details}</div>`;
+            }
+            resultHTML += `</div>`;
+            
+            document.getElementById("resultat").innerHTML = resultHTML;
         }
     </script>
 </body>
