@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calcul Covoiturage</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        input, button {
+            margin: 10px 0;
+            padding: 8px;
+            width: 100%;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        #resultat {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Calcul Covoiturage</h1>
+    <form>
+        <label for="randonneurs">Nombre de randonneurs :</label>
+        <input type="number" id="randonneurs" required>
+
+        <label for="kilometres">Kilomètres (aller-retour) :</label>
+        <input type="number" id="kilometres" required>
+
+        <label for="prixKm">Prix au km (€) :</label>
+        <input type="number" id="prixKm" value="0.10" step="0.01" required>
+
+        <button type="button" onclick="calculer()">Calculer</button>
+    </form>
+
+    <div id="resultat"></div>
+
+    <script>
+        function calculer() {
+            const randonneurs = parseInt(document.getElementById("randonneurs").value);
+            const kilometres = parseInt(document.getElementById("kilometres").value);
+            const prixKm = parseFloat(document.getElementById("prixKm").value);
+
+            const voitures = Math.ceil(randonneurs / 4);
+            const passagersPayants = randonneurs - voitures;
+            const sommeTotale = kilometres * prixKm * passagersPayants;
+            const sommeParPassager = sommeTotale / passagersPayants;
+            const sommeParVoiture = sommeTotale / voitures;
+
+            let repartition = "<h3>Répartition :</h3>";
+            for (let i = 1; i <= voitures; i++) {
+                repartition += `<p>Voiture ${i} : ${sommeParVoiture.toFixed(2)} €</p>`;
+            }
+
+            document.getElementById("resultat").innerHTML = `
+                <h3>Résultats</h3>
+                <p>Nombre de voitures : ${voitures}</p>
+                <p>Somme par passager : ${sommeParPassager.toFixed(2)} €</p>
+                ${repartition}
+            `;
+        }
+    </script>
+</body>
+</html>
