@@ -4,6 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Calcul Covoiturage</title>
+<link rel="manifest" href="/covoiturage/manifest.json">
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/covoiturage/sw.js');
+  }
+</script>   
     <style>
         body { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; }
         input, button { margin: 10px 0; padding: 8px; width: 100%; }
